@@ -28,6 +28,12 @@ export function claudeToOpenAIRequest(model, body, stream) {
     result.temperature = body.temperature;
   }
 
+  // Effort: output_config.effort (Claude Code) → reasoning_effort (OpenAI)
+  if (body.output_config?.effort) {
+    result.reasoning_effort = body.output_config.effort;
+    console.log(`[${new Date().toTimeString().slice(0,8)}] [Effort] Claude→OpenAI: "${body.output_config.effort}"`);
+  }
+
   // System message
   if (body.system) {
     const systemContent = Array.isArray(body.system)
