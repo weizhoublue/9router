@@ -229,6 +229,11 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     providerHeaders = result.headers;
     finalBody = result.transformedBody;
     reqLogger.logTargetRequest(providerUrl, providerHeaders, finalBody);
+
+    const outgoingEffort = finalBody?.reasoning_effort || finalBody?.effort;
+    if (outgoingEffort) {
+      console.log(`[${new Date().toTimeString().slice(0,8)}] [Effort] To ${providerUrl} (${model}): "${outgoingEffort}"`);
+    }
   } catch (error) {
     trackPendingRequest(model, provider, connectionId, false, true);
     appendRequestLog({ model, provider, connectionId, status: `FAILED ${error.name === "AbortError" ? 499 : HTTP_STATUS.BAD_GATEWAY}` }).catch(() => { });
