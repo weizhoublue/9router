@@ -3,10 +3,9 @@ name: Welan Push Docker Image
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: "Branch to build from"
+      ref:
+        description: "Git ref to build from (commit, branch, or tag)"
         required: true
-        default: "claude-effort"
         type: string
       version:
         description: "Image tag (e.g. v1.0.0)"
@@ -26,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
+          ref: ${{ inputs.ref }}
 
       - uses: docker/setup-buildx-action@v3
 
@@ -60,35 +59,3 @@ jobs:
           platforms: linux/amd64,linux/arm64
           provenance: false
           sbom: false
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.version }}
-          name: ${{ inputs.version }}
-          body: |
-            ## Published
-
-            **Version:** ${{ inputs.version }}
-            **Branch:** ${{ inputs.branch }}
-
-            Pull the image:
-
-            ```sh
-            docker pull ghcr.io/${{ github.repository }}:${{ inputs.version }}
-            ```
-
-            Quick start:
-
-            ```sh
-            docker run -d \
-              --restart=always \
-              --name 9router \
-              -p 20128:20128 \
-              -v "$HOME/.9router:/app/data" \
-              -e DATA_DIR=/app/data \
-              -e INITIAL_PASSWORD="123456" \
-              ghcr.io/${{ github.repository }}:${{ inputs.version }}
-            ```
-          draft: false
-          prerelease: false
