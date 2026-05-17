@@ -27,14 +27,23 @@ export async function POST(request) {
     const executor = getExecutor(provider);
     const stream = body.stream !== false;
 
-    let { response } = await executor.execute({ model, body, stream, credentials });
+    let { response, transformedBody, url } = await executor.execute({ model, body, stream, credentials });
+
+    const outgoingEffort = transformedBody?.reasoning_effort || transformedBody?.effort;
+    if (outgoingEffort) {
+      console.log(`[${new Date().toTimeString().slice(0,8)}] [Effort] To ${url} (${model}): "${outgoingEffort}"`);
+    }
 
     // Auto-refresh token on 401/403 and retry (same as chatCore.js)
     if (response.status === 401 || response.status === 403) {
       const newCredentials = await refreshTokenByProvider(provider, credentials);
       if (newCredentials?.accessToken || newCredentials?.copilotToken) {
         Object.assign(credentials, newCredentials);
-        ({ response } = await executor.execute({ model, body, stream, credentials }));
+        ({ response, transformedBody, url } = await executor.execute({ model, body, stream, credentials }));
+        const retryOutgoingEffort = transformedBody?.reasoning_effort || transformedBody?.effort;
+        if (retryOutgoingEffort) {
+          console.log(`[${new Date().toTimeString().slice(0,8)}] [Effort] To ${url} (${model}): "${retryOutgoingEffort}"`);
+        }
       }
     }
 

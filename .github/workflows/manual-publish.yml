@@ -61,6 +61,12 @@ jobs:
           provenance: false
           sbom: false
 
+      - name: Create release branch
+        run: |
+          git branch -D release/${{ inputs.version }} || true
+          git checkout -b release/${{ inputs.version }}
+          git push -f origin release/${{ inputs.version }}
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
