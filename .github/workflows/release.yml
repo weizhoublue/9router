@@ -1,0 +1,139 @@
+name: Welan Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version"
+        required: true
+        type: string
+
+env:
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  UPSTREAM_REPOSITORY: https://github.com/decolua/9router.git
+  UPSTREAM_BRANCH: master
+  RELEASE_BRANCH: release/${{ inputs.version }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Check out fork
+        uses: actions/checkout@v4
+        with:
+          ref: claude-effort
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate release version is unused
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag ${{ inputs.version }} already exists"
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --heads origin "${RELEASE_BRANCH}" >/dev/null 2>&1; then
+            echo "::error::Branch ${RELEASE_BRANCH} already exists"
+            exit 1
+          fi
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync master and rebase (local only)
+        run: |
+          git remote add upstream "${UPSTREAM_REPOSITORY}"
+          git fetch upstream "${UPSTREAM_BRANCH}"
+          git fetch origin master claude-effort --tags
+
+          git push --force origin "upstream/${UPSTREAM_BRANCH}:master"
+
+          git checkout -B claude-effort origin/claude-effort
+          git rebase "upstream/${UPSTREAM_BRANCH}"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest
+            type=sha,prefix=${{ inputs.version }}-
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache,mode=max
+          platforms: linux/amd64,linux/arm64
+          provenance: false
+          sbom: false
+
+      - name: Push rebased claude-effort
+        run: |
+          git push --force-with-lease origin claude-effort
+
+      - name: Create release branch and tag
+        run: |
+          git checkout claude-effort
+          git checkout -b "${RELEASE_BRANCH}"
+          git push origin "${RELEASE_BRANCH}"
+
+          git tag "${{ inputs.version }}"
+          git push origin "refs/tags/${{ inputs.version }}"
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## Published
+
+          **Version:** ${{ inputs.version }}
+          **Branch:** claude-effort
+
+          Pull the image:
+
+          ```sh
+          docker pull ghcr.io/${{ github.repository }}:${{ inputs.version }}
+          ```
+
+          Quick start:
+
+          ```sh
+          docker run -d \
+            --restart=always \
+            --name 9router \
+            -p 20128:20128 \
+            -v "$HOME/.9router:/app/data" \
+            -e DATA_DIR=/app/data \
+            -e INITIAL_PASSWORD="123456" \
+            ghcr.io/${{ github.repository }}:${{ inputs.version }}
+          ```
+          EOF
+
+          gh release create "${{ inputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --title "${{ inputs.version }}" \
+            --notes-file release-notes.md
