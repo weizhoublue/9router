@@ -55,7 +55,11 @@ jobs:
           git push --force origin "upstream/${UPSTREAM_BRANCH}:master"
 
           git checkout -B claude-effort origin/claude-effort
-          git rebase "upstream/${UPSTREAM_BRANCH}"
+          if ! git rebase "upstream/${UPSTREAM_BRANCH}"; then
+            echo "::error::Rebase failed due to conflicts. Showing conflict diff:"
+            git diff
+            exit 1
+          fi
 
       - uses: docker/setup-buildx-action@v3
 
